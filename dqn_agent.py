@@ -77,10 +77,10 @@ class DQNAgent:
         # Hyperparameters
         self.gamma = 0.99  # Discount factor
         self.epsilon = 1.0  # Exploration rate
-        self.epsilon_min = 0.01
+        self.epsilon_min = 0.1  # 下限を0.1に（常に10%の探索を維持）
         self.epsilon_decay = 0.9995  # 以前: 0.995（減衰が速すぎた）→ 0.9995に変更
         # 計算: 0.9995^10000 ≈ 0.006 で約10000エピソード後に0.01に到達
-        self.learning_rate = 0.001  # v5: 0.0001 → 0.001（10倍アップ）
+        self.learning_rate = 0.0001  # v10: 0.003 → 0.0001（損失爆発防止のため30倍削減）
         self.batch_size = 64
         self.target_update_freq = 1000  # Update target network every N steps
         
@@ -92,7 +92,8 @@ class DQNAgent:
         
         # Optimizer and loss
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
-        self.criterion = nn.MSELoss()
+        # Huber Loss（外れ値に強く、大きな報酬値でも安定）
+        self.criterion = nn.SmoothL1Loss()  # SmoothL1Loss = Huber Loss
         
         # Replay buffer
         self.memory = ReplayBuffer(capacity=10000)
@@ -159,8 +160,8 @@ class DQNAgent:
         # Optimize
         self.optimizer.zero_grad()
         loss.backward()
-        # Gradient clipping
-        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), 1.0)
+        # Gradient clipping（強化: 1.0 → 0.5）
+        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), 0.5)
         self.optimizer.step()
         
         # Update target network

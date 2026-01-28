@@ -20,14 +20,18 @@ except ImportError:
 
 # Constants for reward design
 T_PIECE_SHAPE_ID = 2
-# バランス報酬設計（v6）- 中間報酬を追加してスパース報酬問題を解決
-# 基本原則：ラインクリアが主報酬、良い配置に小報酬、悪い配置に小ペナルティ
-HOLE_PENALTY = 0.5          # 穴作成を軽く抑制
-HEIGHT_PENALTY = 0.01       # 高さ増加を軽く抑制
-BUMPINESS_PENALTY = 0.01    # 凹凸を軽く抑制
-SURVIVAL_REWARD = 0.1       # 生存に小報酬（重要！）
-GAME_OVER_PENALTY = 10      # ゲームオーバーを避ける
-PIECE_PLACEMENT_REWARD = 0.5  # ブロック配置成功に小報酬
+# v10報酬設計：超巨大ライン報酬 + 中間報酬の時間減衰
+HOLE_PENALTY = 0.1          # ペナルティ最小化
+HEIGHT_PENALTY = 0.0        # 廃止
+BUMPINESS_PENALTY = 0.0     # 廃止
+SURVIVAL_REWARD = 0.1       # 生存報酬維持
+GAME_OVER_PENALTY = 5       # ペナルティ削減
+PIECE_PLACEMENT_REWARD = 0.5  # 配置報酬維持
+ALMOST_FULL_LINE_REWARD = 2.0  # ほぼ満杯の行に報酬（80%以上）
+VERY_FULL_LINE_REWARD = 5.0    # 非常に満杯の行に報酬（90%以上）
+ONE_AWAY_FROM_CLEAR_REWARD = 50.0  # 9/10埋まった行に超高額報酬！
+TOP_ROWS_BONUS = 2.0           # 上位4行のボーナス倍率
+INTERMEDIATE_REWARD_DECAY = 0.995  # 中間報酬の減衰率（1ステップごと）
 
 
 class TetrisEnv(gym.Env):
@@ -94,6 +98,10 @@ class TetrisEnv(gym.Env):
         self.steps_since_fall = 0
         self.fall_frequency = 1  # Piece falls every N steps
         
+        # 中間報酬の減衰カウンタ
+        self.steps_since_line_clear = 0  # ライン消去からのステップ数
+        self.intermediate_reward_multiplier = 1.0  # 中間報酬の減衰倍率
+        
     def reset(self, seed=None, options=None):
         """Reset the environment to initial state"""
         super().reset(seed=seed)
@@ -114,6 +122,10 @@ class TetrisEnv(gym.Env):
         
         # Reset auto-fall counter
         self.steps_since_fall = 0
+        
+        # Reset intermediate reward decay
+        self.steps_since_line_clear = 0
+        self.intermediate_reward_multiplier = 1.0
         
         return self._get_observation(), {}
     
@@ -204,27 +216,20 @@ class TetrisEnv(gym.Env):
         num_lines = len(lines_to_clear)
         is_tspin = self._check_tspin()
         
-        # Calculate reward based on line clears - バランス報酬設計（v6）
+        # Calculate reward based on line clears - v10: 超巨大報酬 400 * (3 ** ライン数)
+        # 1ライン: 1200, 2ライン: 3600, 3ライン: 10800, 4ライン: 32400
         reward = 0
         is_difficult = False
         
         if is_tspin and num_lines > 0:
             is_difficult = True
-            if num_lines == 1:
-                reward = 200     # T-Spin Single
-            elif num_lines == 2:
-                reward = 400     # T-Spin Double
-            elif num_lines == 3:
-                reward = 800     # T-Spin Triple
-        elif num_lines == 4:
-            is_difficult = True
-            reward = 400         # テトリス（4ライン同時消去）
-        elif num_lines == 3:
-            reward = 150         # 3ラインクリア
-        elif num_lines == 2:
-            reward = 80          # 2ラインクリア
-        elif num_lines == 1:
-            reward = 40          # 1ラインクリア
+            # T-Spin報酬は基本報酬の2倍
+            reward = 400 * (3 ** num_lines) * 2
+        elif num_lines >= 1:
+            if num_lines == 4:
+                is_difficult = True
+            # 基本報酬: 400 * (3 ** ライン数)
+            reward = 400 * (3 ** num_lines)
         
         # Back-to-Back bonus
         if is_difficult and self.last_clear_difficult and self.back_to_back:
@@ -242,6 +247,10 @@ class TetrisEnv(gym.Env):
         for y in sorted(lines_to_clear, reverse=True):
             del self.grid[y]
             self.grid.insert(0, [0 for _ in range(self.grid_width)])
+        
+        # ライン消去成功で中間報酬減衰をリセット
+        self.steps_since_line_clear = 0
+        self.intermediate_reward_multiplier = 1.0
         
         self.current_piece.last_rotation = False
         return reward
@@ -275,7 +284,14 @@ class TetrisEnv(gym.Env):
         for i in range(len(heights) - 1):
             bumpiness += abs(heights[i] - heights[i + 1])
         
-        return max_height, holes, bumpiness
+        # 行の充填率を計算（v8で追加）
+        row_fill_rates = []
+        for y in range(self.grid_height):
+            filled = sum(1 for x in range(self.grid_width) if self.grid[y][x])
+            fill_rate = filled / self.grid_width
+            row_fill_rates.append(fill_rate)
+        
+        return max_height, holes, bumpiness, row_fill_rates
     
     def step(self, action):
         """Execute action and return observation, reward, done, info"""
@@ -341,7 +357,41 @@ class TetrisEnv(gym.Env):
                     reward += PIECE_PLACEMENT_REWARD  # ブロック配置成功報酬
         
         # Calculate board statistics for reward shaping
-        height, holes, bumpiness = self._calculate_board_stats()
+        height, holes, bumpiness, row_fill_rates = self._calculate_board_stats()
+        
+        # v10: 中間報酬に時間減衰を適用
+        # ライン消去からの経過時間で中間報酬が減少し、消すとリセット
+        fill_reward = 0
+        for y, fill_rate in enumerate(row_fill_rates):
+            filled_count = int(fill_rate * self.grid_width)
+            
+            # 9/10マス埋まった行に超高額報酬（ラインクリア直前！）
+            if filled_count == 9:  # 残り1マス
+                bonus = ONE_AWAY_FROM_CLEAR_REWARD
+                # 上位4行（浅い部分）ならボーナス
+                if y >= self.grid_height - 4:
+                    bonus *= TOP_ROWS_BONUS
+                fill_reward += bonus
+            elif fill_rate >= 0.9:  # 90%以上満杯（9マス以上だが10未満）
+                bonus = VERY_FULL_LINE_REWARD
+                # 上位4行（浅い部分）ならボーナス
+                if y >= self.grid_height - 4:
+                    bonus *= TOP_ROWS_BONUS
+                fill_reward += bonus
+            elif fill_rate >= 0.8:  # 80%以上満杯
+                bonus = ALMOST_FULL_LINE_REWARD
+                # 上位4行（浅い部分）ならボーナス
+                if y >= self.grid_height - 4:
+                    bonus *= TOP_ROWS_BONUS
+                fill_reward += bonus
+        
+        # 中間報酬に減衰倍率を適用
+        fill_reward *= self.intermediate_reward_multiplier
+        reward += fill_reward
+        
+        # 中間報酬減衰を進行（ライン消去していない場合のみ）
+        self.steps_since_line_clear += 1
+        self.intermediate_reward_multiplier *= INTERMEDIATE_REWARD_DECAY
         
         # Reward shaping using defined constants
         reward -= (holes - self.prev_holes) * HOLE_PENALTY
