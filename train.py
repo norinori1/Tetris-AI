@@ -96,7 +96,7 @@ def train_dqn(num_episodes=1000, max_steps=1000, save_freq=100, model_dir='model
             eta_seconds = remaining_episodes * time_per_episode
             eta_minutes = eta_seconds / 60
             
-            print(f"Episode {episode + 1}/{num_episodes} [ETA: {eta_minutes:.1f}分]")
+            print(f"Episode {episode + 1}/{num_episodes} [ETA: {eta_minutes:.1f} min]")
             print(f"  Avg Reward: {avg_reward:.2f}")
             print(f"  Avg Lines: {avg_lines:.2f}")
             print(f"  Avg Steps: {avg_length:.1f}")
@@ -110,7 +110,7 @@ def train_dqn(num_episodes=1000, max_steps=1000, save_freq=100, model_dir='model
         if (episode + 1) % save_freq == 0:
             model_path = os.path.join(model_dir, f'tetris_dqn_episode_{episode + 1}.pth')
             agent.save(model_path)
-            print(f"✓ Model saved: {model_path}")
+            print(f"[SAVED] Model saved: {model_path}")
             print()
         
         # Save best model when average lines improve
@@ -118,7 +118,7 @@ def train_dqn(num_episodes=1000, max_steps=1000, save_freq=100, model_dir='model
             best_avg_lines = current_avg_lines
             best_model_path = os.path.join(model_dir, 'tetris_dqn_best.pth')
             agent.save(best_model_path)
-            print(f"★ New best model saved! Avg Lines: {best_avg_lines:.2f}")
+            print(f"[BEST] New best model saved! Avg Lines: {best_avg_lines:.2f}")
             print()
     
     # Save final model

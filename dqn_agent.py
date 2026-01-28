@@ -27,7 +27,7 @@ class SumTree:
         """Propagate priority change up the tree"""
         parent = (idx - 1) // 2
         self.tree[parent] += change
-        if parent != 0:
+        if parent > 0:
             self._propagate(parent, change)
     
     def _retrieve(self, idx, s):
@@ -108,26 +108,35 @@ class PrioritizedReplayBuffer:
         beta_progress = min(1.0, self.frame / self.beta_frames)
         self.beta = self.beta_start + beta_progress * (1.0 - self.beta_start)
         
-        segment = self.tree.total() / batch_size
+        # Ensure we have valid total priority
+        total = self.tree.total()
+        if total <= 0:
+            total = 1e-6  # Prevent division by zero
+        
+        segment = total / batch_size
         
         for i in range(batch_size):
             a = segment * i
             b = segment * (i + 1)
             s = random.uniform(a, b)
             idx, priority, data = self.tree.get(s)
-            if data is None or (isinstance(data, (int, float)) and data == 0):
-                # Handle empty slots by resampling
-                s = random.uniform(0, self.tree.total())
+            # Keep resampling until we get valid data
+            attempts = 0
+            while (data is None or (isinstance(data, (int, float)) and data == 0)) and attempts < 10:
+                s = random.uniform(0, total)
                 idx, priority, data = self.tree.get(s)
+                attempts += 1
             batch.append(data)
             indices.append(idx)
-            priorities.append(priority)
+            priorities.append(max(priority, 1e-6))  # Ensure non-zero priority
         
         # Calculate importance sampling weights
-        total = self.tree.total()
         probabilities = np.array(priorities) / total
         weights = (self.tree.n_entries * probabilities) ** (-self.beta)
-        weights = weights / weights.max()  # Normalize weights
+        max_weight = weights.max()
+        if max_weight <= 0:
+            max_weight = 1.0  # Prevent division by zero
+        weights = weights / max_weight  # Normalize weights
         
         states, actions, rewards, next_states, dones = zip(*batch)
         

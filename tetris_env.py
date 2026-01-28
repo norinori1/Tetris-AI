@@ -47,7 +47,8 @@ class TetrisEnv(gym.Env):
     """
     Tetris Environment for RL agents
     
-    Observation Space: Grid state (20 height x 10 width) + current piece encoding
+    Observation Space: Grid state (20 height x 10 width) + current piece encoding 
+                       + position (x, y) + next piece encoding
     Action Space: 
         0: Move left
         1: Move right
