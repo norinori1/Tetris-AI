@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import random
+import os
 from collections import deque
 
 
@@ -184,9 +185,15 @@ class DQNAgent:
     
     def load(self, filepath):
         """Load model weights"""
-        checkpoint = torch.load(filepath, map_location=self.device)
-        self.policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
-        self.target_net.load_state_dict(checkpoint['target_net_state_dict'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        self.epsilon = checkpoint['epsilon']
-        self.steps = checkpoint['steps']
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Model file not found: {filepath}")
+        
+        try:
+            checkpoint = torch.load(filepath, map_location=self.device)
+            self.policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
+            self.target_net.load_state_dict(checkpoint['target_net_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            self.epsilon = checkpoint['epsilon']
+            self.steps = checkpoint['steps']
+        except Exception as e:
+            raise RuntimeError(f"Failed to load model from {filepath}: {e}")

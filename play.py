@@ -4,6 +4,7 @@ Loads trained model and plays Tetris
 """
 import torch
 import numpy as np
+import os
 from tetris_env import TetrisEnv
 from dqn_agent import DQNAgent
 import argparse
@@ -20,6 +21,12 @@ def play_tetris(model_path, num_games=5, render=True, delay=0.1):
         render: Whether to render the game
         delay: Delay between actions (seconds)
     """
+    # Check if model file exists
+    if not os.path.exists(model_path):
+        print(f"Error: Model file not found: {model_path}")
+        print("Please train a model first using: python train.py")
+        return
+    
     # Setup device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
@@ -99,6 +106,12 @@ def evaluate_agent(model_path, num_episodes=100):
     Returns:
         Dictionary with evaluation metrics
     """
+    # Check if model file exists
+    if not os.path.exists(model_path):
+        print(f"Error: Model file not found: {model_path}")
+        print("Please train a model first using: python train.py")
+        return None
+    
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     env = TetrisEnv()
     

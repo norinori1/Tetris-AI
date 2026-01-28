@@ -75,17 +75,18 @@ def train_dqn(num_episodes=1000, max_steps=1000, save_freq=100, model_dir='model
         if episode_loss:
             losses.append(np.mean(episode_loss))
         
-        # Print progress
+    # Print progress
         if (episode + 1) % 10 == 0:
             avg_reward = np.mean(episode_rewards[-10:])
             avg_lines = np.mean(episode_lines[-10:])
+            avg_length = np.mean(episode_lengths[-10:])
             avg_loss = np.mean(losses[-10:]) if losses else 0
             print(f"Episode {episode + 1}/{num_episodes}")
             print(f"  Avg Reward: {avg_reward:.2f}")
             print(f"  Avg Lines: {avg_lines:.2f}")
+            print(f"  Avg Episode Length: {avg_length:.1f}")
             print(f"  Avg Loss: {avg_loss:.4f}")
             print(f"  Epsilon: {agent.epsilon:.4f}")
-            print(f"  Steps: {step + 1}")
         
         # Save model
         if (episode + 1) % save_freq == 0:
@@ -162,5 +163,6 @@ if __name__ == '__main__':
     )
     
     print("\nTraining completed!")
-    print(f"Average reward (last 100 episodes): {np.mean(rewards[-100:]):.2f}")
-    print(f"Average lines (last 100 episodes): {np.mean(lines[-100:]):.2f}")
+    num_final_episodes = min(100, len(rewards))
+    print(f"Average reward (last {num_final_episodes} episodes): {np.mean(rewards[-num_final_episodes:]):.2f}")
+    print(f"Average lines (last {num_final_episodes} episodes): {np.mean(lines[-num_final_episodes:]):.2f}")

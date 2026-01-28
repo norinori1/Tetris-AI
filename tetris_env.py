@@ -7,15 +7,31 @@ from gymnasium import spaces
 import numpy as np
 import pygame
 import sys
-sys.path.append('Tetris-AI')
-from Tetris_AI import Tetromino, SHAPES, COLORS, GRID_WIDTH, GRID_HEIGHT
+import os
+
+# Add Tetris-AI to path for importing the original game
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'Tetris-AI'))
+try:
+    from Tetris_AI import Tetromino, SHAPES, COLORS, GRID_WIDTH, GRID_HEIGHT
+except ImportError:
+    # Fallback for different directory structures
+    from Tetris_AI import Tetromino, SHAPES, COLORS, GRID_WIDTH, GRID_HEIGHT
+
+
+# Constants for reward design
+T_PIECE_SHAPE_ID = 2
+HOLE_PENALTY = 0.5
+HEIGHT_PENALTY = 0.01
+BUMPINESS_PENALTY = 0.01
+SURVIVAL_REWARD = 0.01
+GAME_OVER_PENALTY = 10
 
 
 class TetrisEnv(gym.Env):
     """
     Tetris Environment for RL agents
     
-    Observation Space: Grid state (20x10) + current piece encoding
+    Observation Space: Grid state (20 height x 10 width) + current piece encoding
     Action Space: 
         0: Move left
         1: Move right
@@ -129,7 +145,6 @@ class TetrisEnv(gym.Env):
                 if cell and self.current_piece.y + y >= 0:
                     self.grid[self.current_piece.y + y][self.current_piece.x + x] = self.current_piece.color
         
-        lines_before = self.lines_cleared
         reward = self._clear_lines()
         
         self.current_piece = self.next_piece
@@ -141,12 +156,18 @@ class TetrisEnv(gym.Env):
         return reward
     
     def _check_tspin(self):
-        """Check if current move is a T-Spin"""
-        if self.current_piece.shape_id != 2:  # Not T piece
+        """
+        Check if current move is a T-Spin
+        
+        A T-Spin is detected when the T piece is rotated and at least 3 of its
+        4 corner positions (in a 3x3 bounding box) are blocked or out of bounds.
+        """
+        if self.current_piece.shape_id != T_PIECE_SHAPE_ID:  # Not T piece
             return 0
         if not self.current_piece.last_rotation:
             return 0
         
+        # Check corners of 3x3 bounding box (assumes T piece fits in 3x3)
         corners = [(0, 0), (2, 0), (0, 2), (2, 2)]
         filled = 0
         for dx, dy in corners:
@@ -290,10 +311,10 @@ class TetrisEnv(gym.Env):
         # Calculate board statistics for reward shaping
         height, holes, bumpiness = self._calculate_board_stats()
         
-        # Reward shaping
-        reward -= (holes - self.prev_holes) * 0.5  # Penalty for creating holes
-        reward -= (height - self.prev_height) * 0.01  # Small penalty for increasing height
-        reward -= (bumpiness - self.prev_bumpiness) * 0.01  # Penalty for bumpiness
+        # Reward shaping using defined constants
+        reward -= (holes - self.prev_holes) * HOLE_PENALTY
+        reward -= (height - self.prev_height) * HEIGHT_PENALTY
+        reward -= (bumpiness - self.prev_bumpiness) * BUMPINESS_PENALTY
         
         self.prev_holes = holes
         self.prev_height = height
@@ -301,10 +322,10 @@ class TetrisEnv(gym.Env):
         
         # Game over penalty
         if self.game_over:
-            reward -= 10
+            reward -= GAME_OVER_PENALTY
         
         # Small survival reward
-        reward += 0.01
+        reward += SURVIVAL_REWARD
         
         terminated = self.game_over
         truncated = False
