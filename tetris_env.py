@@ -20,18 +20,21 @@ except ImportError:
 
 # Constants for reward design
 T_PIECE_SHAPE_ID = 2
-# v10報酬設計：超巨大ライン報酬 + 中間報酬の時間減衰
-HOLE_PENALTY = 0.1          # ペナルティ最小化
-HEIGHT_PENALTY = 0.0        # 廃止
-BUMPINESS_PENALTY = 0.0     # 廃止
-SURVIVAL_REWARD = 0.1       # 生存報酬維持
-GAME_OVER_PENALTY = 5       # ペナルティ削減
-PIECE_PLACEMENT_REWARD = 0.5  # 配置報酬維持
-ALMOST_FULL_LINE_REWARD = 2.0  # ほぼ満杯の行に報酬（80%以上）
-VERY_FULL_LINE_REWARD = 5.0    # 非常に満杯の行に報酬（90%以上）
-ONE_AWAY_FROM_CLEAR_REWARD = 50.0  # 9/10埋まった行に超高額報酬！
-TOP_ROWS_BONUS = 2.0           # 上位4行のボーナス倍率
-INTERMEDIATE_REWARD_DECAY = 0.995  # 中間報酬の減衰率（1ステップごと）
+# v13 報酬設計：より細かい誘導で段階的学習
+HOLE_PENALTY = 3.0           # 穴のペナルティをさらに強化（2.0→3.0）
+HEIGHT_PENALTY = 0.5         # 高さペナルティを強化（0.3→0.5）
+BUMPINESS_PENALTY = 0.3      # 凹凸ペナルティを強化（0.2→0.3）
+SURVIVAL_REWARD = 1.0        # 生存報酬を増加（0.5→1.0）
+GAME_OVER_PENALTY = 10       # ゲームオーバーペナルティを削減（20→10）探索を促す
+PIECE_PLACEMENT_REWARD = 3.0 # 配置報酬を増加（2.0→3.0）
+# 中間報酬：段階的に強化
+SOME_FILLED_REWARD = 3.0         # 50%以上満杯の行（新規）
+MOST_FILLED_REWARD = 8.0         # 70%以上満杯の行（新規）
+ALMOST_FULL_LINE_REWARD = 20.0   # 80%以上満杯の行（15→20）
+VERY_FULL_LINE_REWARD = 40.0     # 90%以上満杯の行（30→40）  
+ONE_AWAY_FROM_CLEAR_REWARD = 80.0  # 9/10埋まった行（60→80）
+# ライン消去報酬：さらに強化して成功を強調
+LINE_CLEAR_BASE_REWARD = 300.0  # 基本報酬を大幅増（200→300）
 
 
 class TetrisEnv(gym.Env):
@@ -98,10 +101,6 @@ class TetrisEnv(gym.Env):
         self.steps_since_fall = 0
         self.fall_frequency = 1  # Piece falls every N steps
         
-        # 中間報酬の減衰カウンタ
-        self.steps_since_line_clear = 0  # ライン消去からのステップ数
-        self.intermediate_reward_multiplier = 1.0  # 中間報酬の減衰倍率
-        
     def reset(self, seed=None, options=None):
         """Reset the environment to initial state"""
         super().reset(seed=seed)
@@ -122,10 +121,6 @@ class TetrisEnv(gym.Env):
         
         # Reset auto-fall counter
         self.steps_since_fall = 0
-        
-        # Reset intermediate reward decay
-        self.steps_since_line_clear = 0
-        self.intermediate_reward_multiplier = 1.0
         
         return self._get_observation(), {}
     
@@ -216,20 +211,20 @@ class TetrisEnv(gym.Env):
         num_lines = len(lines_to_clear)
         is_tspin = self._check_tspin()
         
-        # Calculate reward based on line clears - v10: 超巨大報酬 400 * (3 ** ライン数)
-        # 1ライン: 1200, 2ライン: 3600, 3ライン: 10800, 4ライン: 32400
+        # v13: シンプルな報酬計算（二次関数的増加）
+        # 1ライン: 300, 2ライン: 1200, 3ライン: 2700, 4ライン: 4800
         reward = 0
         is_difficult = False
         
         if is_tspin and num_lines > 0:
             is_difficult = True
             # T-Spin報酬は基本報酬の2倍
-            reward = 400 * (3 ** num_lines) * 2
+            reward = LINE_CLEAR_BASE_REWARD * num_lines * num_lines * 2
         elif num_lines >= 1:
             if num_lines == 4:
                 is_difficult = True
-            # 基本報酬: 400 * (3 ** ライン数)
-            reward = 400 * (3 ** num_lines)
+            # 基本報酬: 300 * lines * lines (二次関数的増加)
+            reward = LINE_CLEAR_BASE_REWARD * num_lines * num_lines
         
         # Back-to-Back bonus
         if is_difficult and self.last_clear_difficult and self.back_to_back:
@@ -247,10 +242,6 @@ class TetrisEnv(gym.Env):
         for y in sorted(lines_to_clear, reverse=True):
             del self.grid[y]
             self.grid.insert(0, [0 for _ in range(self.grid_width)])
-        
-        # ライン消去成功で中間報酬減衰をリセット
-        self.steps_since_line_clear = 0
-        self.intermediate_reward_multiplier = 1.0
         
         self.current_piece.last_rotation = False
         return reward
@@ -359,39 +350,40 @@ class TetrisEnv(gym.Env):
         # Calculate board statistics for reward shaping
         height, holes, bumpiness, row_fill_rates = self._calculate_board_stats()
         
-        # v10: 中間報酬に時間減衰を適用
-        # ライン消去からの経過時間で中間報酬が減少し、消すとリセット
+        # v13: より細かい段階的報酬でライン消去を誘導
         fill_reward = 0
+        filled_rows_count = 0  # 埋まっている行の数
+        
         for y, fill_rate in enumerate(row_fill_rates):
             filled_count = int(fill_rate * self.grid_width)
             
-            # 9/10マス埋まった行に超高額報酬（ラインクリア直前！）
-            if filled_count == 9:  # 残り1マス
-                bonus = ONE_AWAY_FROM_CLEAR_REWARD
-                # 上位4行（浅い部分）ならボーナス
-                if y >= self.grid_height - 4:
-                    bonus *= TOP_ROWS_BONUS
-                fill_reward += bonus
-            elif fill_rate >= 0.9:  # 90%以上満杯（9マス以上だが10未満）
-                bonus = VERY_FULL_LINE_REWARD
-                # 上位4行（浅い部分）ならボーナス
-                if y >= self.grid_height - 4:
-                    bonus *= TOP_ROWS_BONUS
-                fill_reward += bonus
-            elif fill_rate >= 0.8:  # 80%以上満杯
-                bonus = ALMOST_FULL_LINE_REWARD
-                # 上位4行（浅い部分）ならボーナス
-                if y >= self.grid_height - 4:
-                    bonus *= TOP_ROWS_BONUS
-                fill_reward += bonus
+            # 下の方の行（画面下部）により高い報酬を与える
+            # y=19が最下行、y=0が最上行なので、yが大きいほど下
+            depth_multiplier = 1.0 + (y / self.grid_height) * 0.5  # 最大1.5倍
+            
+            # 段階的な報酬で細かく誘導（10マス幅のテトリス用に最適化）
+            # 注: grid_width=10を前提とした条件分岐
+            if filled_count == 9:  # 9/10マス：残り1マス！超高額報酬
+                fill_reward += ONE_AWAY_FROM_CLEAR_REWARD * depth_multiplier
+                filled_rows_count += 1.0
+            elif fill_rate >= 0.9:  # 90%以上満杯（9マス以上）
+                fill_reward += VERY_FULL_LINE_REWARD * depth_multiplier
+                filled_rows_count += 0.8
+            elif fill_rate >= 0.8:  # 80%以上満杯（8マス以上）
+                fill_reward += ALMOST_FULL_LINE_REWARD * depth_multiplier
+                filled_rows_count += 0.6
+            elif fill_rate >= 0.7:  # 70%以上満杯（7マス以上）
+                fill_reward += MOST_FILLED_REWARD * depth_multiplier
+                filled_rows_count += 0.4
+            elif fill_rate >= 0.5:  # 50%以上満杯（5マス以上）
+                fill_reward += SOME_FILLED_REWARD * depth_multiplier
+                filled_rows_count += 0.2
         
-        # 中間報酬に減衰倍率を適用
-        fill_reward *= self.intermediate_reward_multiplier
+        # 複数行が同時に埋まっている場合にボーナス（連鎖を促す）
+        if filled_rows_count >= 2:
+            fill_reward *= 1.5
+        
         reward += fill_reward
-        
-        # 中間報酬減衰を進行（ライン消去していない場合のみ）
-        self.steps_since_line_clear += 1
-        self.intermediate_reward_multiplier *= INTERMEDIATE_REWARD_DECAY
         
         # Reward shaping using defined constants
         reward -= (holes - self.prev_holes) * HOLE_PENALTY

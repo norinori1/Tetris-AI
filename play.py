@@ -60,6 +60,14 @@ def play_tetris(model_path, num_games=5, render=True, delay=0.1):
         
         while not done:
             if render:
+                # Process pygame events to prevent freezing
+                import pygame
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        print("\nGame interrupted by user")
+                        env.close()
+                        return
+                
                 env.render()
                 time.sleep(delay)
             
