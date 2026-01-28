@@ -20,11 +20,27 @@ except ImportError:
 
 # Constants for reward design
 T_PIECE_SHAPE_ID = 2
-HOLE_PENALTY = 0.5
-HEIGHT_PENALTY = 0.01
-BUMPINESS_PENALTY = 0.01
+# Reduced penalties to prevent overwhelming line clear rewards
+HOLE_PENALTY = 0.3
+HEIGHT_PENALTY = 0.005
+BUMPINESS_PENALTY = 0.005
 SURVIVAL_REWARD = 0.01
-GAME_OVER_PENALTY = 10
+GAME_OVER_PENALTY = 5
+
+# Line clear rewards - significantly increased to encourage line clearing
+LINE_CLEAR_REWARDS = {
+    1: 10,   # Single line: increased from 1
+    2: 30,   # Double: increased from 3
+    3: 60,   # Triple: increased from 5
+    4: 100,  # Tetris: increased from 8
+}
+
+# T-Spin rewards
+TSPIN_REWARDS = {
+    1: 15,   # T-Spin Single
+    2: 25,   # T-Spin Double
+    3: 40,   # T-Spin Triple
+}
 
 
 class TetrisEnv(gym.Env):
@@ -52,11 +68,12 @@ class TetrisEnv(gym.Env):
         # Action space: 5 discrete actions
         self.action_space = spaces.Discrete(5)
         
-        # Observation space: grid + piece info
-        # Grid: 20x10, Piece: 7 one-hot encoded, Position: x, y
+        # Observation space: grid + current piece info + next piece info
+        # Grid: 20x10, Current Piece: 7 one-hot encoded, Position: x, y
+        # Next Piece: 7 one-hot encoded
         self.observation_space = spaces.Box(
             low=0, high=1, 
-            shape=(self.grid_height * self.grid_width + 7 + 2,), 
+            shape=(self.grid_height * self.grid_width + 7 + 2 + 7,), 
             dtype=np.float32
         )
         
@@ -123,7 +140,11 @@ class TetrisEnv(gym.Env):
         pos_x = self.current_piece.x / self.grid_width
         pos_y = self.current_piece.y / self.grid_height
         
-        return np.array(grid_flat + piece_encoding + [pos_x, pos_y], dtype=np.float32)
+        # One-hot encode next piece (important for planning)
+        next_piece_encoding = [0.0] * 7
+        next_piece_encoding[self.next_piece.shape_id] = 1.0
+        
+        return np.array(grid_flat + piece_encoding + [pos_x, pos_y] + next_piece_encoding, dtype=np.float32)
     
     def _check_collision(self, piece, offset_x=0, offset_y=0):
         """Check if piece collides with grid or boundaries"""
@@ -194,23 +215,18 @@ class TetrisEnv(gym.Env):
         num_lines = len(lines_to_clear)
         is_tspin = self._check_tspin()
         
-        # Calculate reward based on line clears
+        # Calculate reward based on line clears using new reward constants
         reward = 0
         is_difficult = False
         
         if is_tspin and num_lines > 0:
             is_difficult = True
-            if num_lines == 1:
-                reward = 8
-            elif num_lines == 2:
-                reward = 12
-            elif num_lines == 3:
-                reward = 16
+            reward = TSPIN_REWARDS.get(num_lines, num_lines * 10)
         elif num_lines == 4:
             is_difficult = True
-            reward = 8
+            reward = LINE_CLEAR_REWARDS[4]
         else:
-            reward = num_lines * 1
+            reward = LINE_CLEAR_REWARDS.get(num_lines, num_lines * 10)
         
         # Back-to-Back bonus
         if is_difficult and self.last_clear_difficult and self.back_to_back:
