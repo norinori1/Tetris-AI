@@ -223,7 +223,7 @@ class TetrisEnv(gym.Env):
         elif num_lines >= 1:
             if num_lines == 4:
                 is_difficult = True
-            # 基本報酬: 300 * lines * lines (二次関数的増加)
+            # 基本報酬: 1000 * lines * lines (二次関数的増加)
             reward = LINE_CLEAR_BASE_REWARD * num_lines * num_lines
         
         # Back-to-Back bonus
