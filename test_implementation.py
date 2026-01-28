@@ -2,6 +2,7 @@
 Test script to verify the Tetris environment and agent work correctly
 """
 import sys
+import torch
 import numpy as np
 from tetris_env import TetrisEnv
 from dqn_agent import DQNAgent
@@ -47,11 +48,20 @@ def test_agent():
     """Test DQN agent functionality"""
     print("Testing DQN Agent...")
     
+    # Setup device with proper fallback
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        print(f"[OK] Using GPU (CUDA): {torch.cuda.get_device_name(0)}")
+    else:
+        device = torch.device('cpu')
+        print("[!] GPU not available - Using CPU instead")
+    print()
+    
     env = TetrisEnv()
     state_size = env.observation_space.shape[0]
     action_size = env.action_space.n
     
-    agent = DQNAgent(state_size, action_size, device='cpu')
+    agent = DQNAgent(state_size, action_size, device=device)
     print(f"✓ Agent created successfully")
     print(f"  State size: {state_size}")
     print(f"  Action size: {action_size}")

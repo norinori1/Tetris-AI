@@ -1,6 +1,6 @@
 """
 Training script for DQN Tetris Agent
-Trains the agent using Deep Q-Learning
+Trains the agent using Deep Q-Learning with Prioritized Experience Replay
 """
 import torch
 import numpy as np
@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from tetris_env import TetrisEnv
 from dqn_agent import DQNAgent
 import os
+import time
 
 
 def train_dqn(num_episodes=1000, max_steps=1000, save_freq=100, model_dir='models'):
@@ -23,9 +24,14 @@ def train_dqn(num_episodes=1000, max_steps=1000, save_freq=100, model_dir='model
     # Create model directory
     os.makedirs(model_dir, exist_ok=True)
     
-    # Setup device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
+    # Setup device with proper fallback
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        print(f"[OK] Using GPU (CUDA): {torch.cuda.get_device_name(0)}")
+    else:
+        device = torch.device('cpu')
+        print("[!] GPU not available - Using CPU instead")
+        print("    Note: Training on CPU will be significantly slower")
     
     # Create environment and agent
     env = TetrisEnv()
@@ -39,9 +45,14 @@ def train_dqn(num_episodes=1000, max_steps=1000, save_freq=100, model_dir='model
     episode_lines = []
     episode_lengths = []
     losses = []
+    best_avg_lines = 0
     
     print("Starting training...")
     print(f"State size: {state_size}, Action size: {action_size}")
+    print(f"Improved settings: Prioritized Experience Replay, Double DQN, Larger Network")
+    print()
+    
+    start_time = time.time()
     
     for episode in range(num_episodes):
         state, _ = env.reset()
@@ -75,24 +86,45 @@ def train_dqn(num_episodes=1000, max_steps=1000, save_freq=100, model_dir='model
         if episode_loss:
             losses.append(np.mean(episode_loss))
         
-    # Print progress
+        # Print progress
         if (episode + 1) % 10 == 0:
             avg_reward = np.mean(episode_rewards[-10:])
             avg_lines = np.mean(episode_lines[-10:])
             avg_length = np.mean(episode_lengths[-10:])
             avg_loss = np.mean(losses[-10:]) if losses else 0
-            print(f"Episode {episode + 1}/{num_episodes}")
+            
+            # Calculate ETA
+            elapsed = time.time() - start_time
+            episodes_done = episode + 1
+            time_per_episode = elapsed / episodes_done
+            remaining_episodes = num_episodes - episodes_done
+            eta_seconds = remaining_episodes * time_per_episode
+            eta_minutes = eta_seconds / 60
+            
+            print(f"Episode {episode + 1}/{num_episodes} [ETA: {eta_minutes:.1f} min]")
             print(f"  Avg Reward: {avg_reward:.2f}")
             print(f"  Avg Lines: {avg_lines:.2f}")
-            print(f"  Avg Episode Length: {avg_length:.1f}")
+            print(f"  Avg Steps: {avg_length:.1f}")
             print(f"  Avg Loss: {avg_loss:.4f}")
             print(f"  Epsilon: {agent.epsilon:.4f}")
+            print()
         
-        # Save model
+        # Save model at intervals and when performance improves
+        current_avg_lines = np.mean(episode_lines[-100:]) if len(episode_lines) >= 100 else np.mean(episode_lines)
+        
         if (episode + 1) % save_freq == 0:
             model_path = os.path.join(model_dir, f'tetris_dqn_episode_{episode + 1}.pth')
             agent.save(model_path)
-            print(f"Model saved to {model_path}")
+            print(f"[SAVED] Model saved: {model_path}")
+            print()
+        
+        # Save best model when average lines improve
+        if current_avg_lines > best_avg_lines and len(episode_lines) >= 50:
+            best_avg_lines = current_avg_lines
+            best_model_path = os.path.join(model_dir, 'tetris_dqn_best.pth')
+            agent.save(best_model_path)
+            print(f"[BEST] New best model saved! Avg Lines: {best_avg_lines:.2f}")
+            print()
     
     # Save final model
     final_model_path = os.path.join(model_dir, 'tetris_dqn_final.pth')
@@ -151,7 +183,7 @@ def plot_training_curves(episode_rewards, episode_lines, losses, save_dir):
 
 if __name__ == '__main__':
     # Training configuration
-    NUM_EPISODES = 1000
+    NUM_EPISODES = 100000
     MAX_STEPS = 1000
     SAVE_FREQ = 100
     

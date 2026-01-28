@@ -27,9 +27,13 @@ def play_tetris(model_path, num_games=5, render=True, delay=0.1):
         print("Please train a model first using: python train.py")
         return
     
-    # Setup device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
+    # Setup device with proper fallback
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        print(f"[OK] Using GPU (CUDA): {torch.cuda.get_device_name(0)}")
+    else:
+        device = torch.device('cpu')
+        print("[!] GPU not available - Using CPU instead")
     
     # Create environment
     render_mode = 'human' if render else None
