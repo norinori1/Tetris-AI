@@ -125,7 +125,7 @@ This implementation uses **DQN (Deep Q-Network)** which combines:
 ## Requirements
 
 - Python 3.8+
-- PyTorch 2.1.0+
+- PyTorch 2.6.0+ (updated for security patches)
 - Gymnasium 0.29.1+
 - Pygame 2.5.2+
 - NumPy 1.24.3+

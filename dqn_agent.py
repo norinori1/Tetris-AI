@@ -189,7 +189,8 @@ class DQNAgent:
             raise FileNotFoundError(f"Model file not found: {filepath}")
         
         try:
-            checkpoint = torch.load(filepath, map_location=self.device)
+            # Use weights_only=True for security (prevents arbitrary code execution)
+            checkpoint = torch.load(filepath, map_location=self.device, weights_only=True)
             self.policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
             self.target_net.load_state_dict(checkpoint['target_net_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
