@@ -74,15 +74,15 @@ class DQNAgent:
         self.action_size = action_size
         self.device = device
         
-        # Hyperparameters
+        # Hyperparameters - v11: バランス調整
         self.gamma = 0.99  # Discount factor
         self.epsilon = 1.0  # Exploration rate
-        self.epsilon_min = 0.1  # 下限を0.1に（常に10%の探索を維持）
-        self.epsilon_decay = 0.9995  # 以前: 0.995（減衰が速すぎた）→ 0.9995に変更
-        # 計算: 0.9995^10000 ≈ 0.006 で約10000エピソード後に0.01に到達
-        self.learning_rate = 0.0001  # v10: 0.003 → 0.0001（損失爆発防止のため30倍削減）
-        self.batch_size = 64
-        self.target_update_freq = 1000  # Update target network every N steps
+        self.epsilon_min = 0.05  # 最小値を0.05に下げる（より積極的に学習）
+        self.epsilon_decay = 0.998  # エピソードごとの減衰（0.9995→0.998）
+        # 計算: 0.998^1000 ≈ 0.135 で約1000エピソード後に0.1付近に
+        self.learning_rate = 0.0005  # 学習率を上げる（0.0001→0.0005）
+        self.batch_size = 128  # バッチサイズを増やして安定性向上（64→128）
+        self.target_update_freq = 500  # ターゲットネットワーク更新頻度を上げる（1000→500）
         
         # Networks
         self.policy_net = DQN(state_size, action_size).to(device)
@@ -95,8 +95,8 @@ class DQNAgent:
         # Huber Loss（外れ値に強く、大きな報酬値でも安定）
         self.criterion = nn.SmoothL1Loss()  # SmoothL1Loss = Huber Loss
         
-        # Replay buffer
-        self.memory = ReplayBuffer(capacity=10000)
+        # Replay buffer - サイズを増やして多様な経験を保存
+        self.memory = ReplayBuffer(capacity=50000)
         
         # Training statistics
         self.steps = 0
@@ -160,8 +160,8 @@ class DQNAgent:
         # Optimize
         self.optimizer.zero_grad()
         loss.backward()
-        # Gradient clipping（強化: 1.0 → 0.5）
-        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), 0.5)
+        # Gradient clipping（1.0に緩和：報酬が小さくなったため）
+        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), 1.0)
         self.optimizer.step()
         
         # Update target network
