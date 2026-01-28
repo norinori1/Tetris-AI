@@ -87,6 +87,10 @@ class TetrisEnv(gym.Env):
         self.prev_height = 0
         self.prev_bumpiness = 0
         
+        # Auto-fall mechanism
+        self.steps_since_fall = 0
+        self.fall_frequency = 1  # Piece falls every N steps
+        
     def reset(self, seed=None, options=None):
         """Reset the environment to initial state"""
         super().reset(seed=seed)
@@ -104,6 +108,9 @@ class TetrisEnv(gym.Env):
         self.prev_holes = 0
         self.prev_height = 0
         self.prev_bumpiness = 0
+        
+        # Reset auto-fall counter
+        self.steps_since_fall = 0
         
         return self._get_observation(), {}
     
@@ -270,6 +277,7 @@ class TetrisEnv(gym.Env):
         
         reward = 0
         self.current_piece.last_rotation = False
+        piece_locked = False
         
         # Execute action
         if action == 0:  # Move left
@@ -301,12 +309,26 @@ class TetrisEnv(gym.Env):
                 self.current_piece.y += 1
             line_clear_reward = self._lock_piece()
             reward += line_clear_reward
+            piece_locked = True
         elif action == 4:  # Soft drop
             if not self._check_collision(self.current_piece, 0, 1):
                 self.current_piece.y += 1
             else:
                 line_clear_reward = self._lock_piece()
                 reward += line_clear_reward
+                piece_locked = True
+        
+        # Auto-fall mechanism (if piece wasn't locked by action)
+        if not piece_locked:
+            self.steps_since_fall += 1
+            if self.steps_since_fall >= self.fall_frequency:
+                self.steps_since_fall = 0
+                if not self._check_collision(self.current_piece, 0, 1):
+                    self.current_piece.y += 1
+                else:
+                    # Piece hits bottom, lock it
+                    line_clear_reward = self._lock_piece()
+                    reward += line_clear_reward
         
         # Calculate board statistics for reward shaping
         height, holes, bumpiness = self._calculate_board_stats()
