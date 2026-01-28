@@ -106,6 +106,8 @@ def test_reward_values():
         SURVIVAL_REWARD,
         GAME_OVER_PENALTY,
         PIECE_PLACEMENT_REWARD,
+        SOME_FILLED_REWARD,
+        MOST_FILLED_REWARD,
         ALMOST_FULL_LINE_REWARD,
         VERY_FULL_LINE_REWARD,
         ONE_AWAY_FROM_CLEAR_REWARD
@@ -122,9 +124,11 @@ def test_reward_values():
     print(f"  Survival reward: {SURVIVAL_REWARD}")
     print(f"  Game over penalty: {GAME_OVER_PENALTY}")
     print(f"  Piece placement: {PIECE_PLACEMENT_REWARD}")
-    print(f"  Almost full line: {ALMOST_FULL_LINE_REWARD}")
-    print(f"  Very full line: {VERY_FULL_LINE_REWARD}")
-    print(f"  One away from clear: {ONE_AWAY_FROM_CLEAR_REWARD}")
+    print(f"  Some filled line (50%+): {SOME_FILLED_REWARD}")
+    print(f"  Most filled line (70%+): {MOST_FILLED_REWARD}")
+    print(f"  Almost full line (80%+): {ALMOST_FULL_LINE_REWARD}")
+    print(f"  Very full line (90%+): {VERY_FULL_LINE_REWARD}")
+    print(f"  One away from clear (9/10): {ONE_AWAY_FROM_CLEAR_REWARD}")
 
 if __name__ == '__main__':
     print("="*60)

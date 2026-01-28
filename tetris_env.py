@@ -211,8 +211,8 @@ class TetrisEnv(gym.Env):
         num_lines = len(lines_to_clear)
         is_tspin = self._check_tspin()
         
-        # v11: シンプルな報酬計算（線形に近い増加）
-        # 1ライン: 100, 2ライン: 300, 3ライン: 600, 4ライン: 1000
+        # v13: シンプルな報酬計算（二次関数的増加）
+        # 1ライン: 300, 2ライン: 1200, 3ライン: 2700, 4ライン: 4800
         reward = 0
         is_difficult = False
         
@@ -223,7 +223,7 @@ class TetrisEnv(gym.Env):
         elif num_lines >= 1:
             if num_lines == 4:
                 is_difficult = True
-            # 基本報酬: 100 * lines * lines (非線形だが穏やか)
+            # 基本報酬: 300 * lines * lines (二次関数的増加)
             reward = LINE_CLEAR_BASE_REWARD * num_lines * num_lines
         
         # Back-to-Back bonus
@@ -361,20 +361,21 @@ class TetrisEnv(gym.Env):
             # y=19が最下行、y=0が最上行なので、yが大きいほど下
             depth_multiplier = 1.0 + (y / self.grid_height) * 0.5  # 最大1.5倍
             
-            # 段階的な報酬で細かく誘導
+            # 段階的な報酬で細かく誘導（10マス幅のテトリス用に最適化）
+            # 注: grid_width=10を前提とした条件分岐
             if filled_count == 9:  # 9/10マス：残り1マス！超高額報酬
                 fill_reward += ONE_AWAY_FROM_CLEAR_REWARD * depth_multiplier
                 filled_rows_count += 1.0
-            elif fill_rate >= 0.9:  # 90%以上満杯
+            elif fill_rate >= 0.9:  # 90%以上満杯（9マス以上）
                 fill_reward += VERY_FULL_LINE_REWARD * depth_multiplier
                 filled_rows_count += 0.8
-            elif fill_rate >= 0.8:  # 80%以上満杯
+            elif fill_rate >= 0.8:  # 80%以上満杯（8マス以上）
                 fill_reward += ALMOST_FULL_LINE_REWARD * depth_multiplier
                 filled_rows_count += 0.6
-            elif fill_rate >= 0.7:  # 70%以上満杯（新規）
+            elif fill_rate >= 0.7:  # 70%以上満杯（7マス以上）
                 fill_reward += MOST_FILLED_REWARD * depth_multiplier
                 filled_rows_count += 0.4
-            elif fill_rate >= 0.5:  # 50%以上満杯（新規）
+            elif fill_rate >= 0.5:  # 50%以上満杯（5マス以上）
                 fill_reward += SOME_FILLED_REWARD * depth_multiplier
                 filled_rows_count += 0.2
         

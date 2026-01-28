@@ -8,7 +8,7 @@
 
 **原因**: Pygameウィンドウのイベント処理が欠けていたため、OSがアプリケーションを「応答なし」と判断
 
-**解決策**: `play.py`の61-70行目に以下を追加:
+**解決策**: `play.py`の62-70行目に以下を追加:
 ```python
 if render:
     # Process pygame events to prevent freezing
