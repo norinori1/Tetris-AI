@@ -20,21 +20,21 @@ except ImportError:
 
 # Constants for reward design
 T_PIECE_SHAPE_ID = 2
-# v13 報酬設計：より細かい誘導で段階的学習
-HOLE_PENALTY = 3.0           # 穴のペナルティをさらに強化（2.0→3.0）
-HEIGHT_PENALTY = 0.5         # 高さペナルティを強化（0.3→0.5）
-BUMPINESS_PENALTY = 0.3      # 凹凸ペナルティを強化（0.2→0.3）
-SURVIVAL_REWARD = 1.0        # 生存報酬を増加（0.5→1.0）
-GAME_OVER_PENALTY = 10       # ゲームオーバーペナルティを削減（20→10）探索を促す
-PIECE_PLACEMENT_REWARD = 3.0 # 配置報酬を増加（2.0→3.0）
-# 中間報酬：段階的に強化
-SOME_FILLED_REWARD = 3.0         # 50%以上満杯の行（新規）
-MOST_FILLED_REWARD = 8.0         # 70%以上満杯の行（新規）
-ALMOST_FULL_LINE_REWARD = 20.0   # 80%以上満杯の行（15→20）
-VERY_FULL_LINE_REWARD = 40.0     # 90%以上満杯の行（30→40）  
-ONE_AWAY_FROM_CLEAR_REWARD = 80.0  # 9/10埋まった行（60→80）
-# ライン消去報酬：さらに強化して成功を強調
-LINE_CLEAR_BASE_REWARD = 300.0  # 基本報酬を大幅増（200→300）
+# v14 報酬設計：ライン消去を最優先に（中間報酬を大幅削減）
+HOLE_PENALTY = 3.0           # 穴のペナルティ
+HEIGHT_PENALTY = 0.5         # 高さペナルティ
+BUMPINESS_PENALTY = 0.3      # 凹凸ペナルティ
+SURVIVAL_REWARD = 0.1        # 生存報酬を削減（1.0→0.1）
+GAME_OVER_PENALTY = 100      # ゲームオーバーペナルティを増加（10→100）
+PIECE_PLACEMENT_REWARD = 0.5 # 配置報酬を削減（3.0→0.5）
+# 中間報酬：大幅に削減してライン消去を最優先に
+SOME_FILLED_REWARD = 0.05        # 50%以上満杯の行（3.0→0.05）
+MOST_FILLED_REWARD = 0.1         # 70%以上満杯の行（8.0→0.1）
+ALMOST_FULL_LINE_REWARD = 0.3    # 80%以上満杯の行（20.0→0.3）
+VERY_FULL_LINE_REWARD = 0.5      # 90%以上満杯の行（40.0→0.5）  
+ONE_AWAY_FROM_CLEAR_REWARD = 1.0 # 9/10埋まった行（80.0→1.0）
+# ライン消去報酬：大幅増加してライン消去を最優先に
+LINE_CLEAR_BASE_REWARD = 1000.0  # 基本報酬を大幅増（300→1000）
 
 
 class TetrisEnv(gym.Env):
@@ -211,8 +211,8 @@ class TetrisEnv(gym.Env):
         num_lines = len(lines_to_clear)
         is_tspin = self._check_tspin()
         
-        # v13: シンプルな報酬計算（二次関数的増加）
-        # 1ライン: 300, 2ライン: 1200, 3ライン: 2700, 4ライン: 4800
+        # v14: ライン消去を最優先（二次関数的増加）
+        # 1ライン: 1000, 2ライン: 4000, 3ライン: 9000, 4ライン: 16000
         reward = 0
         is_difficult = False
         
@@ -350,7 +350,7 @@ class TetrisEnv(gym.Env):
         # Calculate board statistics for reward shaping
         height, holes, bumpiness, row_fill_rates = self._calculate_board_stats()
         
-        # v13: より細かい段階的報酬でライン消去を誘導
+        # v14: 中間報酬を大幅削減してライン消去を誘導
         fill_reward = 0
         filled_rows_count = 0  # 埋まっている行の数
         
