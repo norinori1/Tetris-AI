@@ -68,6 +68,9 @@ def train_dqn(num_episodes=1000, max_steps=1000, save_freq=100, model_dir='model
             if done:
                 break
         
+        # End of episode - decay epsilon per episode
+        agent.end_episode()
+        
         # Record statistics
         episode_rewards.append(episode_reward)
         episode_lines.append(info.get('lines_cleared', 0))

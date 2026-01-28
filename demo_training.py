@@ -58,6 +58,9 @@ def quick_train_demo():
             if done:
                 break
         
+        # End of episode - decay epsilon per episode
+        agent.end_episode()
+        
         episode_rewards.append(episode_reward)
         episode_lines.append(info.get('lines_cleared', 0))
         

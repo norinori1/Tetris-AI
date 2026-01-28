@@ -20,11 +20,14 @@ except ImportError:
 
 # Constants for reward design
 T_PIECE_SHAPE_ID = 2
-HOLE_PENALTY = 0.5
-HEIGHT_PENALTY = 0.01
-BUMPINESS_PENALTY = 0.01
-SURVIVAL_REWARD = 0.01
-GAME_OVER_PENALTY = 10
+# バランス報酬設計（v6）- 中間報酬を追加してスパース報酬問題を解決
+# 基本原則：ラインクリアが主報酬、良い配置に小報酬、悪い配置に小ペナルティ
+HOLE_PENALTY = 0.5          # 穴作成を軽く抑制
+HEIGHT_PENALTY = 0.01       # 高さ増加を軽く抑制
+BUMPINESS_PENALTY = 0.01    # 凹凸を軽く抑制
+SURVIVAL_REWARD = 0.1       # 生存に小報酬（重要！）
+GAME_OVER_PENALTY = 10      # ゲームオーバーを避ける
+PIECE_PLACEMENT_REWARD = 0.5  # ブロック配置成功に小報酬
 
 
 class TetrisEnv(gym.Env):
@@ -201,23 +204,27 @@ class TetrisEnv(gym.Env):
         num_lines = len(lines_to_clear)
         is_tspin = self._check_tspin()
         
-        # Calculate reward based on line clears
+        # Calculate reward based on line clears - バランス報酬設計（v6）
         reward = 0
         is_difficult = False
         
         if is_tspin and num_lines > 0:
             is_difficult = True
             if num_lines == 1:
-                reward = 8
+                reward = 200     # T-Spin Single
             elif num_lines == 2:
-                reward = 12
+                reward = 400     # T-Spin Double
             elif num_lines == 3:
-                reward = 16
+                reward = 800     # T-Spin Triple
         elif num_lines == 4:
             is_difficult = True
-            reward = 8
-        else:
-            reward = num_lines * 1
+            reward = 400         # テトリス（4ライン同時消去）
+        elif num_lines == 3:
+            reward = 150         # 3ラインクリア
+        elif num_lines == 2:
+            reward = 80          # 2ラインクリア
+        elif num_lines == 1:
+            reward = 40          # 1ラインクリア
         
         # Back-to-Back bonus
         if is_difficult and self.last_clear_difficult and self.back_to_back:
@@ -309,6 +316,7 @@ class TetrisEnv(gym.Env):
                 self.current_piece.y += 1
             line_clear_reward = self._lock_piece()
             reward += line_clear_reward
+            reward += PIECE_PLACEMENT_REWARD  # ブロック配置成功報酬
             piece_locked = True
         elif action == 4:  # Soft drop
             if not self._check_collision(self.current_piece, 0, 1):
@@ -316,6 +324,7 @@ class TetrisEnv(gym.Env):
             else:
                 line_clear_reward = self._lock_piece()
                 reward += line_clear_reward
+                reward += PIECE_PLACEMENT_REWARD  # ブロック配置成功報酬
                 piece_locked = True
         
         # Auto-fall mechanism (if piece wasn't locked by action)
@@ -329,6 +338,7 @@ class TetrisEnv(gym.Env):
                     # Piece hits bottom, lock it
                     line_clear_reward = self._lock_piece()
                     reward += line_clear_reward
+                    reward += PIECE_PLACEMENT_REWARD  # ブロック配置成功報酬
         
         # Calculate board statistics for reward shaping
         height, holes, bumpiness = self._calculate_board_stats()

@@ -83,6 +83,9 @@ def train_dqn_gpu(num_episodes=2000, max_steps=1000, save_freq=100, model_dir='m
             if done:
                 break
         
+        # End of episode - decay epsilon per episode (not per step)
+        agent.end_episode()
+        
         # Record statistics
         episode_rewards.append(episode_reward)
         episode_lines.append(info.get('lines_cleared', 0))
