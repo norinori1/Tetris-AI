@@ -2,6 +2,20 @@
 
 Deep Q-Network (DQN) implementation for playing Tetris automatically using reinforcement learning.
 
+[日本語ドキュメント (Japanese Documentation)](IMPLEMENTATION.md) | [学習ガイド (Training Guide)](TRAINING_GUIDE.md)
+
+## Overview
+
+This project implements a Tetris-playing AI using Deep Q-Network (DQN), a reinforcement learning algorithm. The AI learns to play Tetris through trial and error, gradually improving its strategy.
+
+**Key Features:**
+- 🎮 DQN-based reinforcement learning agent
+- 🔄 Experience replay for efficient learning
+- 🎯 Target network for stable training
+- 📊 Comprehensive reward shaping
+- 📈 Training visualization
+- 🎪 Support for T-Spin and Back-to-Back detection
+
 ## Quick Start
 
 ### Installation
@@ -13,41 +27,114 @@ pip install -r requirements.txt
 ### Train the Agent
 
 ```bash
+# Quick test (100 episodes, ~5-10 minutes)
+python demo_training.py
+
+# Full training (1000 episodes, ~1-2 hours)
 python train.py
 ```
 
-This will train the DQN agent for 1000 episodes and save models in the `models/` directory.
+The trained model will be saved in the `models/` directory.
 
 ### Play with Trained Agent
 
 ```bash
+# Play 5 games with visualization
 python play.py --model models/tetris_dqn_final.pth --games 5
+
+# Evaluate performance over 100 games
+python play.py --model models/tetris_dqn_final.pth --evaluate --eval-episodes 100
 ```
 
-### Evaluate Agent
+### Test the Implementation
 
 ```bash
-python play.py --model models/tetris_dqn_final.pth --evaluate --eval-episodes 100
+# Run comprehensive tests
+python test_implementation.py
 ```
 
 ## Files
 
-- `tetris_env.py`: Gym-compatible Tetris environment
-- `dqn_agent.py`: DQN agent implementation with experience replay
-- `train.py`: Training script
-- `play.py`: Play/evaluation script
-- `IMPLEMENTATION.md`: Detailed documentation in Japanese (機械学習の詳細説明)
-
-## Features
-
-- Deep Q-Network (DQN) with experience replay
-- Target network for stable learning
-- Comprehensive reward shaping (line clears, holes, height, bumpiness)
-- T-Spin and Back-to-Back detection
-- Training visualization and statistics
+- **tetris_env.py**: Gym-compatible Tetris environment
+- **dqn_agent.py**: DQN agent implementation with experience replay
+- **train.py**: Training script with visualization
+- **play.py**: Play/evaluation script
+- **demo_training.py**: Quick training demo
+- **test_implementation.py**: Test suite
+- **IMPLEMENTATION.md**: Detailed documentation in Japanese (機械学習の詳細説明)
+- **TRAINING_GUIDE.md**: Training configuration guide (学習パラメータガイド)
 
 ## Documentation
 
-For detailed explanation of the implementation, reward design, and machine learning concepts, see [IMPLEMENTATION.md](IMPLEMENTATION.md).
+For detailed explanation of the implementation, reward design, and machine learning concepts:
+- [IMPLEMENTATION.md](IMPLEMENTATION.md) - Complete guide in Japanese
+- [TRAINING_GUIDE.md](TRAINING_GUIDE.md) - Training configuration examples
 
-詳細な実装説明、報酬設計、機械学習の概念については[IMPLEMENTATION.md](IMPLEMENTATION.md)をご覧ください。
+詳細な実装説明、報酬設計、機械学習の概念については:
+- [IMPLEMENTATION.md](IMPLEMENTATION.md) - 完全なガイド（日本語）
+- [TRAINING_GUIDE.md](TRAINING_GUIDE.md) - 学習パラメータの設定例
+
+## Customization
+
+### Training Parameters
+
+Edit `train.py`:
+```python
+NUM_EPISODES = 1000  # Number of training episodes
+MAX_STEPS = 1000     # Max steps per episode
+SAVE_FREQ = 100      # Save model every N episodes
+```
+
+### Hyperparameters
+
+Edit `dqn_agent.py`:
+```python
+self.gamma = 0.99           # Discount factor
+self.learning_rate = 0.0001 # Learning rate
+self.batch_size = 64        # Mini-batch size
+self.epsilon_decay = 0.995  # Exploration decay rate
+```
+
+### Reward Design
+
+Edit `tetris_env.py`:
+```python
+HOLE_PENALTY = 0.5      # Penalty for creating holes
+HEIGHT_PENALTY = 0.01   # Penalty for height increase
+GAME_OVER_PENALTY = 10  # Penalty for game over
+```
+
+See [TRAINING_GUIDE.md](TRAINING_GUIDE.md) for more examples.
+
+## Performance
+
+With default settings (1000 episodes):
+- Average lines cleared: varies based on training
+- Training time: ~1-2 hours on CPU, ~30-60 minutes on GPU
+
+For better performance, train for 5000-10000 episodes.
+
+## Algorithm
+
+This implementation uses **DQN (Deep Q-Network)** which combines:
+1. **Q-Learning**: Learn action-value function
+2. **Deep Neural Network**: Approximate Q-values
+3. **Experience Replay**: Store and reuse past experiences
+4. **Target Network**: Stabilize training
+
+## Requirements
+
+- Python 3.8+
+- PyTorch 2.1.0+
+- Gymnasium 0.29.1+
+- Pygame 2.5.2+
+- NumPy 1.24.3+
+- Matplotlib 3.8.0+
+
+## License
+
+This is an educational project for learning reinforcement learning.
+
+## Contributing
+
+Feel free to open issues or submit pull requests for improvements!
