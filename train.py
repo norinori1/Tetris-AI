@@ -24,9 +24,14 @@ def train_dqn(num_episodes=1000, max_steps=1000, save_freq=100, model_dir='model
     # Create model directory
     os.makedirs(model_dir, exist_ok=True)
     
-    # Setup device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
+    # Setup device with proper fallback
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        print(f"[OK] Using GPU (CUDA): {torch.cuda.get_device_name(0)}")
+    else:
+        device = torch.device('cpu')
+        print("[!] GPU not available - Using CPU instead")
+        print("    Note: Training on CPU will be significantly slower")
     
     # Create environment and agent
     env = TetrisEnv()
@@ -178,7 +183,7 @@ def plot_training_curves(episode_rewards, episode_lines, losses, save_dir):
 
 if __name__ == '__main__':
     # Training configuration
-    NUM_EPISODES = 1000
+    NUM_EPISODES = 100000
     MAX_STEPS = 1000
     SAVE_FREQ = 100
     

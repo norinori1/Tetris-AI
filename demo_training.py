@@ -18,8 +18,13 @@ def quick_train_demo():
     print()
     
     # Setup
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Device: {device}")
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        print(f"[OK] Using GPU (CUDA): {torch.cuda.get_device_name(0)}")
+    else:
+        device = torch.device('cpu')
+        print("[!] GPU not available - Using CPU instead")
+        print("    Note: Training on CPU will be significantly slower")
     
     env = TetrisEnv()
     state_size = env.observation_space.shape[0]

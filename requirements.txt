@@ -1,3 +1,12 @@
+# Note: For GPU support, use the official PyTorch installation:
+# https://pytorch.org/get-started/locally/
+# 
+# For CUDA 12.x (recommended for RTX 40xx series):
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+#
+# For CPU only:
+# pip install torch torchvision torchaudio
+
 pygame==2.5.2
 torch>=2.6.0
 numpy==1.24.3
