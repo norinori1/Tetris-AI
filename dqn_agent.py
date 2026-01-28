@@ -74,15 +74,15 @@ class DQNAgent:
         self.action_size = action_size
         self.device = device
         
-        # Hyperparameters - v11: バランス調整
+        # Hyperparameters - v12: さらなる探索強化
         self.gamma = 0.99  # Discount factor
         self.epsilon = 1.0  # Exploration rate
-        self.epsilon_min = 0.05  # 最小値を0.05に下げる（より積極的に学習）
-        self.epsilon_decay = 0.998  # エピソードごとの減衰（0.9995→0.998）
-        # 計算: 0.998^1000 ≈ 0.135 で約1000エピソード後に0.1付近に
-        self.learning_rate = 0.0005  # 学習率を上げる（0.0001→0.0005）
-        self.batch_size = 128  # バッチサイズを増やして安定性向上（64→128）
-        self.target_update_freq = 500  # ターゲットネットワーク更新頻度を上げる（1000→500）
+        self.epsilon_min = 0.1  # 最小値を0.1に戻す（探索維持）
+        self.epsilon_decay = 0.995  # エピソードごとの減衰を緩やかに（0.998→0.995）
+        # 計算: 0.995^1000 ≈ 0.006 で約1000エピソード後も探索継続
+        self.learning_rate = 0.001  # 学習率を上げる（0.0005→0.001）
+        self.batch_size = 64  # バッチサイズを戻す（128→64）学習を速く
+        self.target_update_freq = 1000  # ターゲットネットワーク更新頻度を戻す
         
         # Networks
         self.policy_net = DQN(state_size, action_size).to(device)
@@ -95,7 +95,7 @@ class DQNAgent:
         # Huber Loss（外れ値に強く、大きな報酬値でも安定）
         self.criterion = nn.SmoothL1Loss()  # SmoothL1Loss = Huber Loss
         
-        # Replay buffer - サイズを増やして多様な経験を保存
+        # Replay buffer
         self.memory = ReplayBuffer(capacity=50000)
         
         # Training statistics

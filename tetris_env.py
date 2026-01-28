@@ -20,19 +20,21 @@ except ImportError:
 
 # Constants for reward design
 T_PIECE_SHAPE_ID = 2
-# v11 報酬設計：シンプル化＋バランス調整で早期学習を促進
-HOLE_PENALTY = 1.0           # 穴のペナルティを強化（0.1→1.0）
-HEIGHT_PENALTY = 0.1         # 高さペナルティを復活（積み上げすぎ防止）
-BUMPINESS_PENALTY = 0.05     # 凹凸ペナルティを復活（平坦化推奨）
-SURVIVAL_REWARD = 0.2        # 生存報酬を増加（長く生き残る動機）
-GAME_OVER_PENALTY = 10       # ゲームオーバーペナルティを増加
-PIECE_PLACEMENT_REWARD = 1.0 # 配置報酬を増加（行動を奨励）
-# 中間報酬：シンプルで固定（減衰なし）
-ALMOST_FULL_LINE_REWARD = 5.0   # 80%以上満杯の行
-VERY_FULL_LINE_REWARD = 10.0    # 90%以上満杯の行  
-ONE_AWAY_FROM_CLEAR_REWARD = 20.0  # 9/10埋まった行（減額：50→20）
-# ライン消去報酬：大幅に減額して現実的な値に
-LINE_CLEAR_BASE_REWARD = 100.0  # 基本報酬（以前の400から削減）
+# v13 報酬設計：より細かい誘導で段階的学習
+HOLE_PENALTY = 3.0           # 穴のペナルティをさらに強化（2.0→3.0）
+HEIGHT_PENALTY = 0.5         # 高さペナルティを強化（0.3→0.5）
+BUMPINESS_PENALTY = 0.3      # 凹凸ペナルティを強化（0.2→0.3）
+SURVIVAL_REWARD = 1.0        # 生存報酬を増加（0.5→1.0）
+GAME_OVER_PENALTY = 10       # ゲームオーバーペナルティを削減（20→10）探索を促す
+PIECE_PLACEMENT_REWARD = 3.0 # 配置報酬を増加（2.0→3.0）
+# 中間報酬：段階的に強化
+SOME_FILLED_REWARD = 3.0         # 50%以上満杯の行（新規）
+MOST_FILLED_REWARD = 8.0         # 70%以上満杯の行（新規）
+ALMOST_FULL_LINE_REWARD = 20.0   # 80%以上満杯の行（15→20）
+VERY_FULL_LINE_REWARD = 40.0     # 90%以上満杯の行（30→40）  
+ONE_AWAY_FROM_CLEAR_REWARD = 80.0  # 9/10埋まった行（60→80）
+# ライン消去報酬：さらに強化して成功を強調
+LINE_CLEAR_BASE_REWARD = 300.0  # 基本報酬を大幅増（200→300）
 
 
 class TetrisEnv(gym.Env):
@@ -348,18 +350,37 @@ class TetrisEnv(gym.Env):
         # Calculate board statistics for reward shaping
         height, holes, bumpiness, row_fill_rates = self._calculate_board_stats()
         
-        # v11: シンプルな中間報酬（減衰なし）
+        # v13: より細かい段階的報酬でライン消去を誘導
         fill_reward = 0
+        filled_rows_count = 0  # 埋まっている行の数
+        
         for y, fill_rate in enumerate(row_fill_rates):
             filled_count = int(fill_rate * self.grid_width)
             
-            # 9/10マス埋まった行に高額報酬（ラインクリア直前！）
-            if filled_count == 9:  # 残り1マス
-                fill_reward += ONE_AWAY_FROM_CLEAR_REWARD
+            # 下の方の行（画面下部）により高い報酬を与える
+            # y=19が最下行、y=0が最上行なので、yが大きいほど下
+            depth_multiplier = 1.0 + (y / self.grid_height) * 0.5  # 最大1.5倍
+            
+            # 段階的な報酬で細かく誘導
+            if filled_count == 9:  # 9/10マス：残り1マス！超高額報酬
+                fill_reward += ONE_AWAY_FROM_CLEAR_REWARD * depth_multiplier
+                filled_rows_count += 1.0
             elif fill_rate >= 0.9:  # 90%以上満杯
-                fill_reward += VERY_FULL_LINE_REWARD
+                fill_reward += VERY_FULL_LINE_REWARD * depth_multiplier
+                filled_rows_count += 0.8
             elif fill_rate >= 0.8:  # 80%以上満杯
-                fill_reward += ALMOST_FULL_LINE_REWARD
+                fill_reward += ALMOST_FULL_LINE_REWARD * depth_multiplier
+                filled_rows_count += 0.6
+            elif fill_rate >= 0.7:  # 70%以上満杯（新規）
+                fill_reward += MOST_FILLED_REWARD * depth_multiplier
+                filled_rows_count += 0.4
+            elif fill_rate >= 0.5:  # 50%以上満杯（新規）
+                fill_reward += SOME_FILLED_REWARD * depth_multiplier
+                filled_rows_count += 0.2
+        
+        # 複数行が同時に埋まっている場合にボーナス（連鎖を促す）
+        if filled_rows_count >= 2:
+            fill_reward *= 1.5
         
         reward += fill_reward
         
