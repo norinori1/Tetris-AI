@@ -90,21 +90,25 @@ SAVE_FREQ = 100      # Save model every N episodes
 Edit `dqn_agent.py`:
 ```python
 self.gamma = 0.99           # Discount factor
-self.learning_rate = 0.0001 # Learning rate
+self.learning_rate = 0.001  # Learning rate
 self.batch_size = 64        # Mini-batch size
 self.epsilon_decay = 0.995  # Exploration decay rate
 ```
 
-### Reward Design
+### Reward Design (v15)
 
 Edit `tetris_env.py`:
 ```python
-HOLE_PENALTY = 0.5      # Penalty for creating holes
-HEIGHT_PENALTY = 0.01   # Penalty for height increase
-GAME_OVER_PENALTY = 10  # Penalty for game over
+# v15 uses exponential scaling for line clears
+LINE_CLEAR_BASE_REWARD = 1000.0  # Base reward
+# 1 line: 1000, 2 lines: 2000, 3 lines: 4000, 4 lines: 8000
+
+WELL_REWARD = 2.0           # Well-building reward
+HEIGHT_DANGER_PENALTY = 5.0 # Danger zone penalty
+COMBO_BONUS = 1.2           # Combo multiplier
 ```
 
-See [TRAINING_GUIDE.md](TRAINING_GUIDE.md) for more examples.
+See [V15_REWARD_REDESIGN.md](V15_REWARD_REDESIGN.md) for detailed explanation of the reward system improvements.
 
 ## Performance
 
