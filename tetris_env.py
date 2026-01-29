@@ -20,21 +20,24 @@ except ImportError:
 
 # Constants for reward design
 T_PIECE_SHAPE_ID = 2
-# v14 報酬設計：ライン消去を最優先に（中間報酬を大幅削減）
+# v15 報酬設計：指数関数的スケーリングでTetris（4ライン）を最優先に
 HOLE_PENALTY = 3.0           # 穴のペナルティ
-HEIGHT_PENALTY = 0.5         # 高さペナルティ
+HEIGHT_PENALTY = 0.5         # 高さペナルティ（基本）
+HEIGHT_DANGER_PENALTY = 5.0  # 危険ゾーン（上部5行）の高さペナルティ
 BUMPINESS_PENALTY = 0.3      # 凹凸ペナルティ
-SURVIVAL_REWARD = 0.1        # 生存報酬を削減（1.0→0.1）
-GAME_OVER_PENALTY = 100      # ゲームオーバーペナルティを増加（10→100）
-PIECE_PLACEMENT_REWARD = 0.5 # 配置報酬を削減（3.0→0.5）
-# 中間報酬：大幅に削減してライン消去を最優先に
-SOME_FILLED_REWARD = 0.05        # 50%以上満杯の行（3.0→0.05）
-MOST_FILLED_REWARD = 0.1         # 70%以上満杯の行（8.0→0.1）
-ALMOST_FULL_LINE_REWARD = 0.3    # 80%以上満杯の行（20.0→0.3）
-VERY_FULL_LINE_REWARD = 0.5      # 90%以上満杯の行（40.0→0.5）  
-ONE_AWAY_FROM_CLEAR_REWARD = 1.0 # 9/10埋まった行（80.0→1.0）
-# ライン消去報酬：大幅増加してライン消去を最優先に
-LINE_CLEAR_BASE_REWARD = 1000.0  # 基本報酬を大幅増（300→1000）
+SURVIVAL_REWARD = 0.1        # 生存報酬
+GAME_OVER_PENALTY = 100      # ゲームオーバーペナルティ
+PIECE_PLACEMENT_REWARD = 0.5 # 配置報酬
+WELL_REWARD = 2.0            # 縦穴（Tetrisセットアップ用）維持報酬
+# 中間報酬：方向性を示すのみ
+SOME_FILLED_REWARD = 0.05        # 50%以上満杯の行
+MOST_FILLED_REWARD = 0.1         # 70%以上満杯の行
+ALMOST_FULL_LINE_REWARD = 0.3    # 80%以上満杯の行
+VERY_FULL_LINE_REWARD = 0.5      # 90%以上満杯の行
+ONE_AWAY_FROM_CLEAR_REWARD = 1.0 # 9/10埋まった行
+# ライン消去報酬：指数関数的増加（1x, 2x, 4x, 8x）でTetrisを強く推奨
+LINE_CLEAR_BASE_REWARD = 1000.0  # 基本報酬
+COMBO_BONUS = 1.2  # 連続クリアボーナス（累積）
 
 
 class TetrisEnv(gym.Env):
@@ -79,6 +82,7 @@ class TetrisEnv(gym.Env):
         self.game_over = False
         self.back_to_back = False
         self.last_clear_difficult = False
+        self.combo_count = 0  # 連続クリア数
         
         # For rendering
         if self.render_mode == 'human':
@@ -113,6 +117,7 @@ class TetrisEnv(gym.Env):
         self.game_over = False
         self.back_to_back = False
         self.last_clear_difficult = False
+        self.combo_count = 0
         
         # Reset statistics
         self.prev_holes = 0
@@ -206,25 +211,37 @@ class TetrisEnv(gym.Env):
         
         if not lines_to_clear:
             self.current_piece.last_rotation = False
+            # ライン消去なしでコンボ途切れる
+            self.combo_count = 0
             return 0
         
         num_lines = len(lines_to_clear)
         is_tspin = self._check_tspin()
         
-        # v14: ライン消去を最優先（二次関数的増加）
-        # 1ライン: 1000, 2ライン: 4000, 3ライン: 9000, 4ライン: 16000
+        # v15: 指数関数的スケーリング（1x, 2x, 4x, 8x）
+        # 1ライン: 1000, 2ライン: 2000, 3ライン: 4000, 4ライン: 8000
+        # Tetris（4ライン）を強く推奨する設計
         reward = 0
         is_difficult = False
+        
+        # 指数関数的スケーリング: 2^(lines-1) * BASE
+        exponential_multiplier = 2 ** (num_lines - 1)
         
         if is_tspin and num_lines > 0:
             is_difficult = True
             # T-Spin報酬は基本報酬の2倍
-            reward = LINE_CLEAR_BASE_REWARD * num_lines * num_lines * 2
+            reward = LINE_CLEAR_BASE_REWARD * exponential_multiplier * 2
         elif num_lines >= 1:
             if num_lines == 4:
                 is_difficult = True
-            # 基本報酬: 1000 * lines * lines (二次関数的増加)
-            reward = LINE_CLEAR_BASE_REWARD * num_lines * num_lines
+            reward = LINE_CLEAR_BASE_REWARD * exponential_multiplier
+        
+        # Combo bonus: 連続クリアで累積ボーナス
+        if self.combo_count > 0:
+            combo_multiplier = COMBO_BONUS ** self.combo_count
+            reward = int(reward * combo_multiplier)
+        
+        self.combo_count += 1
         
         # Back-to-Back bonus
         if is_difficult and self.last_clear_difficult and self.back_to_back:
@@ -260,6 +277,28 @@ class TetrisEnv(gym.Env):
         
         max_height = max(heights) if heights else 0
         
+        # Danger zone height: count blocks in top 5 rows (y=0 to y=4)
+        danger_zone_height = 0
+        for x in range(self.grid_width):
+            for y in range(5):  # Top 5 rows
+                if self.grid[y][x]:
+                    danger_zone_height += 1
+        
+        # Well detection: find vertical empty spaces suitable for Tetris
+        # A well is a column that's significantly lower than its neighbors (at least 3 rows)
+        # and has at least 4 rows of vertical space available
+        wells = 0
+        for x in range(self.grid_width):
+            # A well must have at least 4 rows of depth
+            if heights[x] + 4 <= self.grid_height:
+                # Check if neighboring columns are significantly higher (at least 3 rows)
+                left_higher = (x == 0) or (heights[x-1] >= heights[x] + 3)
+                right_higher = (x == self.grid_width-1) or (heights[x+1] >= heights[x] + 3)
+                
+                # Both neighbors must be higher, or it's an edge column
+                if left_higher and right_higher:
+                    wells += 1
+        
         # Holes: empty cells with filled cells above
         holes = 0
         for x in range(self.grid_width):
@@ -275,14 +314,14 @@ class TetrisEnv(gym.Env):
         for i in range(len(heights) - 1):
             bumpiness += abs(heights[i] - heights[i + 1])
         
-        # 行の充填率を計算（v8で追加）
+        # 行の充填率を計算
         row_fill_rates = []
         for y in range(self.grid_height):
             filled = sum(1 for x in range(self.grid_width) if self.grid[y][x])
             fill_rate = filled / self.grid_width
             row_fill_rates.append(fill_rate)
         
-        return max_height, holes, bumpiness, row_fill_rates
+        return max_height, holes, bumpiness, row_fill_rates, wells, danger_zone_height
     
     def step(self, action):
         """Execute action and return observation, reward, done, info"""
@@ -348,9 +387,9 @@ class TetrisEnv(gym.Env):
                     reward += PIECE_PLACEMENT_REWARD  # ブロック配置成功報酬
         
         # Calculate board statistics for reward shaping
-        height, holes, bumpiness, row_fill_rates = self._calculate_board_stats()
+        height, holes, bumpiness, row_fill_rates, wells, danger_zone_height = self._calculate_board_stats()
         
-        # v14: 中間報酬を大幅削減してライン消去を誘導
+        # v15: 中間報酬 + well報酬 + 危険ゾーンペナルティ
         fill_reward = 0
         filled_rows_count = 0  # 埋まっている行の数
         
@@ -385,10 +424,16 @@ class TetrisEnv(gym.Env):
         
         reward += fill_reward
         
+        # Well reward: Tetrisセットアップ用の縦穴を維持していたら報酬
+        reward += wells * WELL_REWARD
+        
         # Reward shaping using defined constants
         reward -= (holes - self.prev_holes) * HOLE_PENALTY
         reward -= (height - self.prev_height) * HEIGHT_PENALTY
         reward -= (bumpiness - self.prev_bumpiness) * BUMPINESS_PENALTY
+        
+        # Danger zone penalty: 危険ゾーン（上部5行）のブロックに追加ペナルティ
+        reward -= danger_zone_height * HEIGHT_DANGER_PENALTY
         
         self.prev_holes = holes
         self.prev_height = height
