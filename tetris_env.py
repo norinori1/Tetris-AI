@@ -284,13 +284,18 @@ class TetrisEnv(gym.Env):
                 if self.grid[y][x]:
                     danger_zone_height += 1
         
-        # Well detection: find empty columns that could be used for Tetris
-        # A well is an empty column surrounded by higher columns
+        # Well detection: find vertical empty spaces suitable for Tetris
+        # A well is a column that's significantly lower than its neighbors (at least 3 rows)
+        # and has at least 4 rows of vertical space available
         wells = 0
         for x in range(self.grid_width):
-            if heights[x] == 0:  # Empty column
-                left_higher = (x == 0 or heights[x-1] >= 4)
-                right_higher = (x == self.grid_width-1 or heights[x+1] >= 4)
+            # A well must have at least 4 rows of depth
+            if heights[x] + 4 <= self.grid_height:
+                # Check if neighboring columns are significantly higher (at least 3 rows)
+                left_higher = (x == 0) or (heights[x-1] >= heights[x] + 3)
+                right_higher = (x == self.grid_width-1) or (heights[x+1] >= heights[x] + 3)
+                
+                # Both neighbors must be higher, or it's an edge column
                 if left_higher and right_higher:
                     wells += 1
         
